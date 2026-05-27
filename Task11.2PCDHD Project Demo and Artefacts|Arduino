@@ -1,26 +1,28 @@
-//Note on Security: For security reasons, the sensitive credentials in this code (WiFi SSID, Password, and MQTT broker IP) have been replaced with placeholders. To run this project locally, please replace these strings with your own network details.
+// Note: For security and uniqueness, replace the WiFi credentials 
+// and the "YOUR_IDENTIFIER" in the MQTT topic before running the project.
 
-#include <Wire.h>
-#include <BH1750.h>
 #include <WiFiNINA.h>
 #include <PubSubClient.h>
+#include <Wire.h>
+#include <BH1750.h>
 
 // ===== WiFi & MQTT Credentials =====
 char ssid[] = "YOUR_WIFI_NAME";
 char pass[] = "YOUR_WIFI_PASSWORD";
-const char* mqtt_server = "YOUR_MQTT_BROKER_IP"; // e.g., Raspberry Pi IP address
+const char* mqtt_server = "broker.emqx.io"; // Using the public MQTT broker
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 BH1750 lightMeter;
 
-// ===== Pin Definitions & Thresholds =====
+// ===== Pin Definitions & Constants =====
 const int pirPin = 2;
 const int ledPin = 5;
 const float DARKNESS_THRESHOLD = 50.0;
-const unsigned long WORK_TIME_LIMIT = 30000; // 30 seconds for testing (change to appropriate minutes)
+// 30 seconds for testing purposes. Change to a higher value for real-world use.
+const unsigned long WORK_TIME_LIMIT = 30000; 
 
-// ===== State Variables & ISR =====
+// ===== State Variables & ISR Flags =====
 volatile bool pirEventTriggered = false;
 bool isWorking = false;
 bool reminderSent = false;
@@ -30,30 +32,34 @@ void setup() {
   Serial.begin(9600);
   while (!Serial);
 
-  // Initialize I2C and BH1750
+  // Initialize I2C and BH1750 Sensor
   Wire.begin();
   if (lightMeter.begin()) {
-    Serial.println("BH1750 Initialized.");
+    Serial.println("BH1750 Initialized Successfully.");
+  } else {
+    Serial.println("Error initializing BH1750.");
   }
 
+  // Configure Pins
   pinMode(pirPin, INPUT_PULLDOWN);
   pinMode(ledPin, OUTPUT);
 
-  // Attach Hardware Interrupt for Motion Sensor
+  // Attach Hardware Interrupt for the PIR Motion Sensor
   attachInterrupt(digitalPinToInterrupt(pirPin), pirISR, CHANGE);
 
-  // Initialize Communication
+  // Initialize Network & MQTT Communication
   connectToWiFi();
   mqttClient.setServer(mqtt_server, 1883);
 }
 
 void loop() {
+  // Ensure MQTT connection is maintained
   if (!mqttClient.connected()) {
     reconnectMQTT();
   }
   mqttClient.loop();
 
-  // ===== Trigger: Motion State Changed =====
+  // ===== Trigger: Motion State Changed (Hardware Interrupt) =====
   if (pirEventTriggered) {
     int pirState = digitalRead(pirPin);
 
@@ -62,39 +68,43 @@ void loop() {
       
       // Check light level only when motion starts
       if (lux < DARKNESS_THRESHOLD) {
-        digitalWrite(ledPin, HIGH); // Turn on LED task light
+        digitalWrite(ledPin, HIGH); // Turn on local LED task light
         
         if (!isWorking) {
           isWorking = true;
-          workStartTime = millis(); // Start tracking time
+          workStartTime = millis(); // Start tracking continuous work time
           reminderSent = false;
-          Serial.println("Motion detected in dark. Work started.");
+          Serial.println("Motion detected in a dark environment. Work session started.");
         }
       }
     } else {
       // Motion stopped
-      digitalWrite(ledPin, LOW);
+      digitalWrite(ledPin, LOW); // Turn off LED
       isWorking = false;
-      Serial.println("Motion stopped. Work paused.");
+      Serial.println("Motion stopped. Work session paused.");
     }
-    pirEventTriggered = false;
+    pirEventTriggered = false; // Reset the interrupt flag
   }
 
-  // ===== Track Time & Send Reminder =====
+  // ===== Track Time & Send Break Reminder =====
   if (isWorking && !reminderSent) {
     if (millis() - workStartTime >= WORK_TIME_LIMIT) {
-      Serial.println("Long time worked! Sending MQTT reminder.");
-      mqttClient.publish("crafting/alert", "Time for a Break!");
+      Serial.println("Work time limit reached! Sending MQTT reminder.");
+      
+      // IMPORTANT: Change "YOUR_IDENTIFIER" to your student ID or name to avoid conflicts
+      mqttClient.publish("SIT210/crafting/alert/YOUR_IDENTIFIER", "Time for a Break!");
+      
       reminderSent = true;
     }
   }
 }
 
-// ===== Helper Functions =====
+// ===== Hardware Interrupt Service Routine (ISR) =====
 void pirISR() {
   pirEventTriggered = true; 
 }
 
+// ===== Helper Functions for Networking =====
 void connectToWiFi() {
   Serial.print("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -102,18 +112,22 @@ void connectToWiFi() {
     Serial.print(".");
     delay(5000);
   }
-  Serial.println("\nWiFi Connected.");
+  Serial.println("\nWiFi Connected Successfully.");
 }
 
 void reconnectMQTT() {
   while (!mqttClient.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (mqttClient.connect("ArduinoCraftingClient")) {
-      Serial.println("connected");
+    // Create a random client ID
+    String clientId = "ArduinoClient-";
+    clientId += String(random(0xffff), HEX);
+    
+    if (mqttClient.connect(clientId.c_str())) {
+      Serial.println("Connected to MQTT Broker.");
     } else {
-      Serial.print("failed, rc=");
+      Serial.print("Failed, rc=");
       Serial.print(mqttClient.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.println(" Trying again in 5 seconds.");
       delay(5000);
     }
   }
