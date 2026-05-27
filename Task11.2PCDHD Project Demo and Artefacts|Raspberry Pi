@@ -9,21 +9,15 @@ TOPIC = "SIT210/crafting/alert/YOUR_IDENTIFIER"
 # ===== GUI Update Functions =====
 def show_reminder(message):
     """Updates the GUI label and brings the window to the front."""
-    alert_label.config(
-        text=f"{message}\nPlease Rest Your Eyes.", 
-        fg="orange", 
-        font=("Arial", 16, "bold")
-    )
+    alert_label.config(text=f"{message}\nPlease Rest Your Eyes.", fg="blue", font=("Arial", 16, "bold"))
+
     # Bring the window to the front of the screen
     root.attributes("-topmost", True)
 
 def dismiss_reminder():
     """Resets the GUI to the default monitoring state."""
-    alert_label.config(
-        text="Status: Monitoring Environment...", 
-        fg="black", 
-        font=("Arial", 12)
-    )
+    alert_label.config(text="Status: Monitoring Environment...", fg="gray", font=("Arial", 12)
+)
     # Allow the window to go to the background again
     root.attributes("-topmost", False)
 
@@ -52,36 +46,16 @@ root.title("Smart Crafting Monitor")
 root.geometry("400x250")
 
 # Header Label
-tk.Label(
-    root, 
-    text="Smart Crafting Monitor", 
-    font=("Arial", 16, "bold")
-).pack(pady=20)
+tk.Label(root, text="Smart Crafting Monitor", font=("Arial", 16, "bold")).pack(pady=20)
 
 # Dynamic Alert Label
-alert_label = tk.Label(
-    root, 
-    text="Status: Monitoring Environment...", 
-    font=("Arial", 12)
-)
+alert_label = tk.Label(root, text="Status: Monitoring Environment...", font=("Arial", 12))
 alert_label.pack(pady=20)
 
 # Control Buttons
-tk.Button(
-    root, 
-    text="Dismiss Reminder", 
-    command=dismiss_reminder, 
-    font=("Arial", 12)
-).pack(pady=5)
+tk.Button(root, text="Dismiss Reminder", command=dismiss_reminder, font=("Arial", 12)).pack(pady=5)
 
-tk.Button(
-    root, 
-    text="Exit", 
-    command=close_app, 
-    bg="red", 
-    fg="white", 
-    font=("Arial", 12)
-).pack(pady=10)
+tk.Button(root, text="Exit", command=close_app, bg="red", fg="white", font=("Arial", 12)).pack(pady=10)
 
 # ===== Initialize & Start MQTT Client =====
 client = mqtt.Client()
@@ -99,5 +73,5 @@ except Exception as e:
 # Handle the window close button (X)
 root.protocol("WM_DELETE_WINDOW", close_app)
 
-# Start the main Tkinter event loop
+# Keep the GUI window
 root.mainloop()
