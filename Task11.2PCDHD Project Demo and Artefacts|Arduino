@@ -1,1 +1,120 @@
+//Note on Security: For security reasons, the sensitive credentials in this code (WiFi SSID, Password, and MQTT broker IP) have been replaced with placeholders. To run this project locally, please replace these strings with your own network details.
 
+#include <Wire.h>
+#include <BH1750.h>
+#include <WiFiNINA.h>
+#include <PubSubClient.h>
+
+// ===== WiFi & MQTT Credentials =====
+char ssid[] = "YOUR_WIFI_NAME";
+char pass[] = "YOUR_WIFI_PASSWORD";
+const char* mqtt_server = "YOUR_MQTT_BROKER_IP"; // e.g., Raspberry Pi IP address
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+BH1750 lightMeter;
+
+// ===== Pin Definitions & Thresholds =====
+const int pirPin = 2;
+const int ledPin = 5;
+const float DARKNESS_THRESHOLD = 50.0;
+const unsigned long WORK_TIME_LIMIT = 30000; // 30 seconds for testing (change to appropriate minutes)
+
+// ===== State Variables & ISR =====
+volatile bool pirEventTriggered = false;
+bool isWorking = false;
+bool reminderSent = false;
+unsigned long workStartTime = 0;
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+
+  // Initialize I2C and BH1750
+  Wire.begin();
+  if (lightMeter.begin()) {
+    Serial.println("BH1750 Initialized.");
+  }
+
+  pinMode(pirPin, INPUT_PULLDOWN);
+  pinMode(ledPin, OUTPUT);
+
+  // Attach Hardware Interrupt for Motion Sensor
+  attachInterrupt(digitalPinToInterrupt(pirPin), pirISR, CHANGE);
+
+  // Initialize Communication
+  connectToWiFi();
+  mqttClient.setServer(mqtt_server, 1883);
+}
+
+void loop() {
+  if (!mqttClient.connected()) {
+    reconnectMQTT();
+  }
+  mqttClient.loop();
+
+  // ===== Trigger: Motion State Changed =====
+  if (pirEventTriggered) {
+    int pirState = digitalRead(pirPin);
+
+    if (pirState == HIGH) {
+      float lux = lightMeter.readLightLevel();
+      
+      // Check light level only when motion starts
+      if (lux < DARKNESS_THRESHOLD) {
+        digitalWrite(ledPin, HIGH); // Turn on LED task light
+        
+        if (!isWorking) {
+          isWorking = true;
+          workStartTime = millis(); // Start tracking time
+          reminderSent = false;
+          Serial.println("Motion detected in dark. Work started.");
+        }
+      }
+    } else {
+      // Motion stopped
+      digitalWrite(ledPin, LOW);
+      isWorking = false;
+      Serial.println("Motion stopped. Work paused.");
+    }
+    pirEventTriggered = false;
+  }
+
+  // ===== Track Time & Send Reminder =====
+  if (isWorking && !reminderSent) {
+    if (millis() - workStartTime >= WORK_TIME_LIMIT) {
+      Serial.println("Long time worked! Sending MQTT reminder.");
+      mqttClient.publish("crafting/alert", "Time for a Break!");
+      reminderSent = true;
+    }
+  }
+}
+
+// ===== Helper Functions =====
+void pirISR() {
+  pirEventTriggered = true; 
+}
+
+void connectToWiFi() {
+  Serial.print("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, pass);
+    Serial.print(".");
+    delay(5000);
+  }
+  Serial.println("\nWiFi Connected.");
+}
+
+void reconnectMQTT() {
+  while (!mqttClient.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    if (mqttClient.connect("ArduinoCraftingClient")) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" try again in 5 seconds");
+      delay(5000);
+    }
+  }
+}
