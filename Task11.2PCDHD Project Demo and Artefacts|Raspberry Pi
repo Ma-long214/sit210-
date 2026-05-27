@@ -1,1 +1,59 @@
+import tkinter as tk
+import paho.mqtt.client as mqtt
 
+# ===== MQTT Configuration =====
+MQTT_BROKER = "YOUR_MQTT_BROKER_IP" # Replace with your broker IP (e.g., "localhost" if running on the same Pi)
+TOPIC = "SIT210/crafting/alert/YOUR_STUDENT_ID_OR_NAME"
+
+# ===== GUI Update Functions =====
+def show_reminder(message):
+    # Updates the GUI label and brings the window to the front
+    alert_label.config(text=f"{message}\nPlease Rest Your Eyes.", fg="orange", font=("Arial", 14, "bold"))
+    root.attributes("-topmost", True)
+
+def dismiss_reminder():
+    # Resets the GUI to default state
+    alert_label.config(text="Status: Normal", fg="black", font=("Arial", 12))
+    root.attributes("-topmost", False)
+
+# ===== MQTT Callbacks =====
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected to MQTT Broker with result code {rc}")
+    client.subscribe(TOPIC)
+
+def on_message(client, userdata, msg):
+    payload = msg.payload.decode()
+    print(f"Message received: {payload}")
+    # Safely update Tkinter GUI from the MQTT background thread
+    root.after(0, show_reminder, payload)
+
+def close_app():
+    client.loop_stop()
+    root.destroy()
+
+# ===== GUI Setup =====
+root = tk.Tk()
+root.title("Smart Crafting Monitor")
+root.geometry("350x250")
+
+tk.Label(root, text="Smart Crafting Monitor", font=("Arial", 14, "bold")).pack(pady=20)
+
+alert_label = tk.Label(root, text="Status: Normal", font=("Arial", 12))
+alert_label.pack(pady=20)
+
+tk.Button(root, text="Dismiss Reminder", command=dismiss_reminder, font=("Arial", 12)).pack(pady=5)
+tk.Button(root, text="Exit", command=close_app, bg="red", fg="white", font=("Arial", 12)).pack(pady=20)
+
+# ===== Initialize MQTT Client =====
+client = mqtt.Client()
+client.on_connect = on_connect
+client.on_message = on_message
+
+try:
+    client.connect(MQTT_BROKER, 1883, 60)
+    client.loop_start() # Run MQTT loop in the background
+except Exception as e:
+    print(f"Failed to connect to MQTT broker: {e}")
+
+root.protocol("WM_DELETE_WINDOW", close_app)
+root.mainloop()
