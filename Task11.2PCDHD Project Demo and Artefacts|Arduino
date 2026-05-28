@@ -36,7 +36,8 @@ void setup() {
   Wire.begin();
   if (lightMeter.begin()) {
     Serial.println("BH1750 Initialized Successfully.");
-  } else {
+  }
+  else {
     Serial.println("Error initializing BH1750.");
   }
 
@@ -77,7 +78,8 @@ void loop() {
           Serial.println("Motion detected in a dark environment. Work session started.");
         }
       }
-    } else {
+    }
+    else {
       // Motion stopped
       digitalWrite(ledPin, LOW); // Turn off LED
       isWorking = false;
