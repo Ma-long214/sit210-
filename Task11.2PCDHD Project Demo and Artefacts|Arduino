@@ -1,6 +1,9 @@
 // Note: For security and uniqueness, replace the WiFi credentials 
 // and the "YOUR_IDENTIFIER" in the MQTT topic before running the project.
 
+// Note: For security and uniqueness, replace the WiFi credentials 
+// and the "YOUR_IDENTIFIER" in the MQTT topic before running the project.
+
 #include <WiFiNINA.h>
 #include <PubSubClient.h>
 #include <Wire.h>
@@ -24,6 +27,7 @@ const unsigned long WORK_TIME_LIMIT = 30000;
 
 // ===== State Variables & ISR Flags =====
 volatile bool pirEventTriggered = false;
+bool motionActive = false;
 bool isWorking = false;
 bool reminderSent = false;
 unsigned long workStartTime = 0;
@@ -54,46 +58,60 @@ void setup() {
 }
 
 void loop() {
-  // Ensure MQTT connection is maintained
   if (!mqttClient.connected()) {
     reconnectMQTT();
   }
   mqttClient.loop();
 
-  // ===== Trigger: Motion State Changed (Hardware Interrupt) =====
+  // ===== 1. Trigger Processing (Only record the "Change" in motion) =====
   if (pirEventTriggered) {
     int pirState = digitalRead(pirPin);
 
     if (pirState == HIGH) {
-      float lux = lightMeter.readLightLevel();
-      
-      // Check light level only when motion starts
-      if (lux < DARKNESS_THRESHOLD) {
-        digitalWrite(ledPin, HIGH); // Turn on local LED task light
-        
-        if (!isWorking) {
-          isWorking = true;
-          workStartTime = millis(); // Start tracking continuous work time
-          reminderSent = false;
-          Serial.println("Motion detected in a dark environment. Work session started.");
-        }
-      }
+      motionActive = true; // Note down: "Someone is here!"
+      Serial.println("Motion detected.");
     }
     else {
-      // Motion stopped
-      digitalWrite(ledPin, LOW); // Turn off LED
+      motionActive = false; // Note down: "The person left!"
+      digitalWrite(ledPin, LOW); // Ensure LED is turned off
       isWorking = false;
       Serial.println("Motion stopped. Work session paused.");
     }
     pirEventTriggered = false; // Reset the interrupt flag
   }
 
-  // ===== Track Time & Send Break Reminder =====
+  // ===== 2. State Monitoring (Continuously check light WHILE someone is present) =====
+  if (motionActive) {
+    float lux = lightMeter.readLightLevel();
+    
+    if (lux < DARKNESS_THRESHOLD) {
+      // If someone is present AND it is dark
+      digitalWrite(ledPin, HIGH); // Turn on the LED
+      
+      if (!isWorking) {
+        isWorking = true;
+        workStartTime = millis(); // Start the timer
+        reminderSent = false;
+        Serial.println("Dark environment detected. Work session started.");
+      }
+    }
+    else {
+      // If someone is present BUT it is bright
+      digitalWrite(ledPin, LOW); // Turn off the LED because the room is bright enough
+      
+      if (isWorking) {
+        isWorking = false; // Pause the timer if it gets bright again
+        Serial.println("Room is bright enough. LED off.");
+      }
+    }
+  }
+
+  // ===== 3. Timer and Alert Sending (Unchanged) =====
   if (isWorking && !reminderSent) {
     if (millis() - workStartTime >= WORK_TIME_LIMIT) {
       Serial.println("Work time limit reached! Sending MQTT reminder.");
       
-      // IMPORTANT: Change "YOUR_IDENTIFIER" to your student ID or name to avoid conflicts
+      // IMPORTANT: Change "YOUR_IDENTIFIER" to your student ID or name
       mqttClient.publish("SIT210/crafting/alert/YOUR_IDENTIFIER", "Time for a Break!");
       
       reminderSent = true;
@@ -126,7 +144,8 @@ void reconnectMQTT() {
     
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println("Connected to MQTT Broker.");
-    } else {
+    }
+    else {
       Serial.print("Failed, rc=");
       Serial.print(mqttClient.state());
       Serial.println(" Trying again in 5 seconds.");
