@@ -1,9 +1,6 @@
 // Note: For security and uniqueness, replace the WiFi credentials 
 // and the "YOUR_IDENTIFIER" in the MQTT topic before running the project.
 
-// Note: For security and uniqueness, replace the WiFi credentials 
-// and the "YOUR_IDENTIFIER" in the MQTT topic before running the project.
-
 #include <WiFiNINA.h>
 #include <PubSubClient.h>
 #include <Wire.h>
